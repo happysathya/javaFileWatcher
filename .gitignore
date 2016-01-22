@@ -1,0 +1,12 @@
+.*
+*.iml
+*.ipr
+*.iws
+*.class
+*.orig
+bin/
+build/
+target/
+catalina.base_IS_UNDEFINED/
+/rules/
+!/.gitignore
