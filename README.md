@@ -1,11 +1,14 @@
-Sample program to watch file events using java nio.
+# Sample program to watch file events using java nio.
 
-./gradlew clean build jar
+### Build:
+##### ./gradlew clean build jar
 
-Usage: 
-java -cp build/libs/javaFileWatcher-0.1.jar com.happysathya.sample.FileWatcherRunner file:/Users/sathya/filewatch
+### Usage:
+##### java -cp build/libs/javaFileWatcher-0.1.jar com.happysathya.sample.FileWatcherRunner file:/Users/sathya/filewatch
 
-Sample output:
+### Sample output:
+
+```
 press enter to exit!!!
 **************************************
 Eventname: ENTRY_CREATE
@@ -23,3 +26,4 @@ File changed: .hello1.txt.swp
 Eventname: ENTRY_MODIFY
 File changed: hello1.txt
 **************************************
+```
