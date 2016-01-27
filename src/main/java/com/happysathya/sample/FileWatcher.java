@@ -4,12 +4,15 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
-import java.util.Optional;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -22,7 +25,6 @@ public class FileWatcher implements Closeable {
     private final WatchService watchService;
     private final URI uri;
 
-    private volatile WatchKey watchKey;
     private volatile boolean hasRegisteredSuccessfully = false;
 
     public FileWatcher(URI uri) throws IOException {
@@ -39,35 +41,49 @@ public class FileWatcher implements Closeable {
     public void close() throws IOException {
         scheduledExecutorService.shutdown();
         watchService.close();
-        Optional.ofNullable(watchKey).ifPresent(WatchKey::cancel);
     }
 
     private void processEvents() {
         if (!hasRegisteredSuccessfully) {
             try {
-                watchKey = Paths.get(uri).register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
+                Files.walkFileTree(Paths.get(uri), new SimpleFileVisitor<Path>() {
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                        dir.register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
                 hasRegisteredSuccessfully = true;
             } catch (IOException e) {
                 return;
             }
         }
-        if (!watchKey.isValid()) {
-            hasRegisteredSuccessfully = false;
-            return;
-        }
-        watchKey.pollEvents().stream().forEach(watchEvent -> {
-            if (watchEvent.kind() != OVERFLOW) {
+
+        while (true) {
+            WatchKey watchKey = watchService.poll();
+            if (watchKey == null) break;
+            Path watchDir = (Path) watchKey.watchable();
+            watchKey.pollEvents().stream().forEach(watchEvent -> {
                 WatchEvent<Path> boundedWatchEvent = (WatchEvent<Path>) watchEvent;
                 Path pathChanged = boundedWatchEvent.context();
-                System.out.println("**************************************");
-                System.out.println("Eventname: " + boundedWatchEvent.kind().name());
-                System.out.println("File changed: " + pathChanged.toString());
-                System.out.println("**************************************");
-            }
-        });
-        if (!watchKey.reset()) {
-            hasRegisteredSuccessfully = false;
-            return;
+                if (watchEvent.kind() != OVERFLOW) {
+                    System.out.println("**************************************");
+                    System.out.println("Eventname: " + boundedWatchEvent.kind().name());
+                    System.out.println("File changed: " + pathChanged.toString());
+                    System.out.println("**************************************");
+                }
+                if (watchEvent.kind() == ENTRY_CREATE) {
+                    try {
+                        Path newDirectoryToWatch = watchDir.resolve(pathChanged);
+                        if (Files.isDirectory(newDirectoryToWatch)) {
+                            newDirectoryToWatch.register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+            watchKey.reset();
         }
     }
 }
